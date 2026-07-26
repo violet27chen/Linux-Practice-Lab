@@ -4,15 +4,23 @@ import {
   resolveSandbox,
   createSandbox,
   isGoneError,
+  sandboxTimeoutMs,
+  remainingTimeoutMs,
   HOME_DIR,
 } from "@/lib/sandbox";
 import { ensureSchema } from "@/db/ensure";
-import { resolveUserId, getDbSandbox, saveDbSandbox } from "@/lib/identity";
+import {
+  resolveUserId,
+  getDbSandbox,
+  saveDbSandbox,
+  getActiveClassForUser,
+} from "@/lib/identity";
 import { COOKIE_NAMES, cookieOpts } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 const DEFAULT_CWD = `${HOME_DIR}/practice`;
 
 /**
@@ -58,6 +66,19 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = await resolveUserId();
+  if (AUTH_ENABLED && !userId) {
+    return new NextResponse("[error] 请先登录后再使用终端。", { status: 401 });
+  }
+  let timeoutMs = sandboxTimeoutMs();
+  if (AUTH_ENABLED) {
+    const ac = await getActiveClassForUser(userId!);
+    if (!ac) {
+      return new NextResponse("[error] 请先加入一个由教师开堂的活跃课堂。", {
+        status: 403,
+      });
+    }
+    timeoutMs = remainingTimeoutMs(ac.endsAt);
+  }
   const dbSb = userId ? await getDbSandbox(userId) : null;
   const effectiveId = dbSb?.sandboxId ?? cookieSandboxId ?? null;
 
@@ -73,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   let resolved: Awaited<ReturnType<typeof resolveSandbox>>;
   try {
-    resolved = await resolveSandbox(effectiveId);
+    resolved = await resolveSandbox(effectiveId, timeoutMs);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new NextResponse(`[error] ${message}`, { status: 500 });
@@ -101,7 +122,7 @@ export async function POST(req: NextRequest) {
       await runCompletion(resolved.sandbox);
     } catch (err) {
       if (isGoneError(err) && !resolved.created) {
-        const fresh = await createSandbox();
+        const fresh = await createSandbox(timeoutMs);
         if (userId) await saveDbSandbox(userId, fresh.sandboxId, cwd);
         resolved = {
           sandbox: fresh,

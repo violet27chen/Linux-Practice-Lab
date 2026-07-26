@@ -5,25 +5,32 @@ import {
   execInSandbox,
   createSandbox,
   isGoneError,
+  sandboxTimeoutMs,
+  remainingTimeoutMs,
   HOME_DIR,
   createStreamWritable,
 } from "@/lib/sandbox";
 import { ensureSchema } from "@/db/ensure";
-import { resolveUserId, getDbSandbox, saveDbSandbox } from "@/lib/identity";
+import {
+  resolveUserId,
+  getDbSandbox,
+  saveDbSandbox,
+  getActiveClassForUser,
+} from "@/lib/identity";
 import { COOKIE_NAMES, cookieOpts } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 const DEFAULT_CWD = `${HOME_DIR}/practice`;
 
 /**
  * Streams a student command through the session's Linux sandbox.
- * - Logged-in users resolve their sandbox id from the DB (survives cookie loss);
- *   anonymous users use the cookie.
- * - `cd` is resolved server-side and returns 204 with updated cookies.
- * - If a reused sandbox has expired (HTTP 410), it is recreated once and the new
- *   id is persisted (to both the cookie and the DB for logged-in users).
+ * - Auth disabled: anonymous cookie sandbox (zero-config mode).
+ * - Auth enabled: caller must be logged in AND in an active class; the sandbox
+ *   lifetime equals the remaining class time. Otherwise returns `needLogin` /
+ *   `needClass` and allocates nothing.
  */
 export async function POST(req: NextRequest) {
   let body: { command?: string };
@@ -45,6 +52,28 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = await resolveUserId();
+  if (AUTH_ENABLED && !userId) {
+    return new NextResponse("\r\n[error] 请先登录 GitHub 后再使用终端。\r\n", {
+      status: 401,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  let timeoutMs = sandboxTimeoutMs();
+  if (AUTH_ENABLED) {
+    const ac = await getActiveClassForUser(userId!);
+    if (!ac) {
+      return new NextResponse(
+        "\r\n[error] 请先加入一个由教师开堂的活跃课堂，再使用终端。\r\n",
+        {
+          status: 403,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        },
+      );
+    }
+    timeoutMs = remainingTimeoutMs(ac.endsAt);
+  }
+
   const dbSb = userId ? await getDbSandbox(userId) : null;
   const effectiveId = dbSb?.sandboxId ?? cookieSandboxId ?? null;
   const cwd = cookieCwd;
@@ -67,7 +96,7 @@ export async function POST(req: NextRequest) {
   let sandboxId: string;
   let reused = false;
   try {
-    const resolved = await resolveSandbox(effectiveId);
+    const resolved = await resolveSandbox(effectiveId, timeoutMs);
     sandbox = resolved.sandbox;
     sandboxId = resolved.sandboxId;
     reused = !resolved.created;
@@ -96,9 +125,9 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`\u0000LP:EXIT=${exitCode}\u0000`));
         } catch (err) {
           // A reused sandbox can expire between requests (HTTP 410). Recreate a
-          // fresh one and retry exactly once; a brand-new sandbox should not 410.
+          // fresh one (with the class timeout) and retry exactly once.
           if (isGoneError(err) && reused) {
-            const fresh = await createSandbox();
+            const fresh = await createSandbox(timeoutMs);
             sandboxId = fresh.sandboxId;
             if (userId) await saveDbSandbox(userId, sandboxId, cwd);
             await execInSandbox(fresh, command, cwd, stdout, stderr);

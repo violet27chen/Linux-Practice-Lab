@@ -7,7 +7,6 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import {
   classes,
   classMembers,
-  classAssignments,
   users,
 } from "@/db/schema";
 
@@ -21,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (me.role !== "teacher") {
     return NextResponse.json({ error: "teacher only" }, { status: 403 });
   }
-  let body: { name?: string };
+  let body: { name?: string; durationMin?: number };
   try {
     body = await req.json();
   } catch {
@@ -29,6 +28,13 @@ export async function POST(req: NextRequest) {
   }
   const name = String(body.name ?? "").trim();
   if (!name) return new NextResponse("Name required", { status: 400 });
+
+  // Validate duration (1..1440 min). Out-of-range values fall back to default.
+  let durationMin = 90;
+  const reqDur = Number(body.durationMin);
+  if (Number.isFinite(reqDur) && reqDur >= 1 && reqDur <= 1440) {
+    durationMin = Math.round(reqDur);
+  }
 
   try {
     await ensureSchema();
@@ -43,9 +49,15 @@ export async function POST(req: NextRequest) {
     try {
       const inserted = await db
         .insert(classes)
-        .values({ teacherId: me.id, name, code })
+        .values({ teacherId: me.id, name, code, durationMin })
         .returning();
-      return NextResponse.json({ ok: true, id: inserted[0].id, code, name });
+      return NextResponse.json({
+        ok: true,
+        id: inserted[0].id,
+        code,
+        name,
+        durationMin,
+      });
     } catch {
       // code collision — try again
     }
@@ -89,15 +101,11 @@ export async function GET() {
 
   const result = await Promise.all(
     all.map(async (c) => {
-      const [m, a] = await Promise.all([
+      const [m] = await Promise.all([
         db!
           .select({ count: sql<number>`count(*)` })
           .from(classMembers)
           .where(eq(classMembers.classId, c.id)),
-        db!
-          .select({ count: sql<number>`count(*)` })
-          .from(classAssignments)
-          .where(eq(classAssignments.classId, c.id)),
       ]);
       return {
         id: c.id,
@@ -105,7 +113,11 @@ export async function GET() {
         code: c.code,
         role: c.teacherId === me.id ? "teacher" : "member",
         memberCount: Number(m[0]?.count ?? 0),
-        assignmentCount: Number(a[0]?.count ?? 0),
+        durationMin: c.durationMin,
+        status: c.status,
+        task: c.task,
+        startedAt: c.startedAt ? c.startedAt.getTime() : null,
+        endsAt: c.endsAt ? c.endsAt.getTime() : null,
       };
     }),
   );

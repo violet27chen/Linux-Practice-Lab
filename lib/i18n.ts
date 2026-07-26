@@ -81,7 +81,43 @@ export type UIKey =
   | "lesson"
   | "name"
   | "progress"
-  | "you";
+  | "you"
+  // classroom mode (login + active class gating)
+  | "needLogin"
+  | "needClass"
+  | "gateLoginHint"
+  | "gateClassHint"
+  | "rejoinHint"
+  | "signInGitHub"
+  // class lifecycle
+  | "openClass"
+  | "closeClass"
+  | "statusDraft"
+  | "statusActive"
+  | "statusEnded"
+  | "classActive"
+  | "classEnded"
+  | "classNotStarted"
+  | "openConfirm"
+  | "closeConfirm"
+  | "reopenClass"
+  // class task + auto-grade
+  | "classTask"
+  | "taskPrompt"
+  | "answerCmd"
+  | "verifyTask"
+  | "taskDone"
+  | "taskNotDone"
+  | "verifyPassed"
+  | "verifyWrong"
+  | "verifyBusy"
+  | "noTaskYet"
+  | "setTask"
+  | "saveTask"
+  | "taskUpdated"
+  | "durationMinLabel"
+  | "completionLabel"
+  | "studentCount";
 
 export const ui: Record<UIKey, { en: string; zh: string }> = {
   appTitle: {
@@ -205,6 +241,84 @@ export const ui: Record<UIKey, { en: string; zh: string }> = {
     zh: "提示：在左侧终端输入命令，然后点“校验”。",
   },
   loading: { en: "Loading…", zh: "加载中……" },
+
+  // classroom mode (login + active class gating)
+  needLogin: {
+    en: "Sign in with GitHub to use the terminal",
+    zh: "请先登录 GitHub 再使用终端",
+  },
+  needClass: {
+    en: "Join an active class to get a sandbox",
+    zh: "加入一个进行中的班级才能分配机器",
+  },
+  gateLoginHint: {
+    en: "The lab is a classroom environment. Log in with GitHub so the teacher can assign you a machine.",
+    zh: "本实验室为课堂环境，请先用 GitHub 登录，老师才能为你分配机器。",
+  },
+  gateClassHint: {
+    en: "You are logged in, but no active class was found. Ask your teacher for the invite code, or open the teacher panel to start one.",
+    zh: "你已登录，但没有找到进行中的班级。向老师索取邀请码，或在教师面板中开堂。",
+  },
+  rejoinHint: {
+    en: "Joined a class in another tab? Refresh to pick up your machine.",
+    zh: "在别的标签页加入了班级？刷新页面即可获取机器。",
+  },
+  signInGitHub: { en: "Sign in with GitHub", zh: "用 GitHub 登录" },
+
+  // class lifecycle
+  openClass: { en: "Start class", zh: "开堂" },
+  closeClass: { en: "End class", zh: "下课" },
+  statusDraft: { en: "Draft", zh: "未开堂" },
+  statusActive: { en: "Live", zh: "进行中" },
+  statusEnded: { en: "Ended", zh: "已结束" },
+  classActive: {
+    en: "Class is live — your sandbox is running.",
+    zh: "课堂进行中，你的沙盒已启动。",
+  },
+  classEnded: {
+    en: "This class has ended. All student sandboxes were reclaimed.",
+    zh: "本课堂已结束，所有学生的沙盒已回收。",
+  },
+  classNotStarted: {
+    en: "The teacher hasn't started this class yet.",
+    zh: "老师尚未开堂。",
+  },
+  openConfirm: {
+    en: "Starting the class begins the countdown and allocates a sandbox to every joined student. Make sure the task and verify command are set.",
+    zh: "开堂后将开始倒计时，并为每位已加入的学生分配沙盒。请先确认任务与校验命令已设置。",
+  },
+  closeConfirm: {
+    en: "Ending the class stops every student's sandbox immediately and locks grading.",
+    zh: "下课将立即终止所有学生的沙盒并锁定成绩。",
+  },
+  reopenClass: { en: "Re-open class", zh: "重新开堂" },
+
+  // class task + auto-grade
+  classTask: { en: "Class task", zh: "课堂任务" },
+  taskPrompt: { en: "Task description", zh: "任务说明" },
+  answerCmd: {
+    en: "Verify command (exit 0 = solved)",
+    zh: "校验命令（退出码 0 视为完成）",
+  },
+  verifyTask: { en: "Submit & verify", zh: "提交并校验" },
+  taskDone: { en: "Task solved — well done!", zh: "任务已完成，做得好！" },
+  taskNotDone: { en: "Task not solved yet", zh: "任务尚未完成" },
+  verifyPassed: { en: "Correct — your answer passes.", zh: "正确，答案校验通过。" },
+  verifyWrong: {
+    en: "Not quite — check the task and try again.",
+    zh: "还不对，再核对任务要求后重试。",
+  },
+  verifyBusy: { en: "Verifying…", zh: "校验中……" },
+  noTaskYet: {
+    en: "No task has been set yet. The teacher will set one when the class starts.",
+    zh: "尚未布置任务，老师开堂时会设置。",
+  },
+  setTask: { en: "Set task", zh: "设置任务" },
+  saveTask: { en: "Save", zh: "保存" },
+  taskUpdated: { en: "Task saved.", zh: "任务已保存。" },
+  durationMinLabel: { en: "Class duration (minutes)", zh: "课堂时长（分钟）" },
+  completionLabel: { en: "Completion", zh: "完成情况" },
+  studentCount: { en: "Students", zh: "学生" },
 };
 
 export function t(key: UIKey, lang: Lang): string {

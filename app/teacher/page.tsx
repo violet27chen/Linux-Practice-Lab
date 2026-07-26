@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Users,
   BookOpenText,
+  Clock,
 } from "@phosphor-icons/react";
 import { useLang } from "@/components/LangProvider";
 
@@ -21,7 +22,8 @@ interface ClassRow {
   code: string;
   role: "teacher" | "member";
   memberCount: number;
-  assignmentCount: number;
+  status: string;
+  durationMin: number;
 }
 
 export default function TeacherPage() {
@@ -30,6 +32,7 @@ export default function TeacherPage() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [duration, setDuration] = useState("90");
   const [created, setCreated] = useState<ClassRow | null>(null);
   const [copied, setCopied] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -67,11 +70,22 @@ export default function TeacherPage() {
       const r = await fetch("/api/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          durationMin: Number(duration) || 90,
+        }),
       });
       const d = await r.json();
       if (d.ok) {
-        setCreated({ id: d.id, name: d.name, code: d.code, role: "teacher", memberCount: 0, assignmentCount: 0 });
+        setCreated({
+          id: d.id,
+          name: d.name,
+          code: d.code,
+          role: "teacher",
+          memberCount: 0,
+          status: "draft",
+          durationMin: d.durationMin ?? 90,
+        });
         setName("");
         await refresh();
       } else {
@@ -148,6 +162,20 @@ export default function TeacherPage() {
               {t("create")}
             </button>
           </div>
+          <div className="field-row">
+            <label className="duration-label" htmlFor="duration">
+              <Clock size={13} weight="bold" /> {t("durationMinLabel")}
+            </label>
+            <input
+              id="duration"
+              className="text-input duration-input"
+              type="number"
+              min={1}
+              max={1440}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+            />
+          </div>
           {created && (
             <div className="invite-box">
               <span className="invite-label">{t("shareCodeHint")}</span>
@@ -195,7 +223,13 @@ export default function TeacherPage() {
                     <span className="class-name">{c.name}</span>
                     <span className="class-meta">
                       <Users size={13} weight="bold" /> {c.memberCount}
-                      <BookOpenText size={13} weight="bold" /> {c.assignmentCount}
+                      <span className={`status-dot-tag status-${c.status}`}>
+                        {c.status === "active"
+                          ? t("statusActive")
+                          : c.status === "ended"
+                            ? t("statusEnded")
+                            : t("statusDraft")}
+                      </span>
                       {c.role === "teacher" ? (
                         <span className="tag teacher">{t("roleTeacher")}</span>
                       ) : (

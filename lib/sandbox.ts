@@ -32,6 +32,18 @@ export function sandboxTimeoutMs(): number {
 }
 
 /**
+ * Sandbox lifetime for a class member: the time left until the class ends,
+ * capped at the platform maximum (`sandboxTimeoutMs`). Guarantees a sane
+ * minimum so a just-expired class still gets a 1-minute sandbox if re-created.
+ */
+export function remainingTimeoutMs(endsAt: number | null): number {
+  const cap = sandboxTimeoutMs();
+  if (!endsAt) return cap;
+  const remaining = endsAt - Date.now();
+  return remaining > 60_000 ? Math.min(remaining, cap) : 60_000;
+}
+
+/**
  * True when an error means the sandbox is gone and must be recreated.
  *
  * @vercel/sandbox's base API client throws `Status code 410 is not ok`
@@ -54,14 +66,28 @@ export function commandTimeoutMs(): number {
   return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 60_000;
 }
 
-/** Create a brand-new sandbox and prepare a friendly working directory. */
-export async function createSandbox(): Promise<SandboxType> {
+/** Create a brand-new sandbox and prepare a friendly working directory.
+ *  `timeoutMs` overrides the default wall-clock lifetime (used to tie a
+ *  student's sandbox to the remaining time of their active class). */
+export async function createSandbox(timeoutMs?: number): Promise<SandboxType> {
   const sandbox = await Sandbox.create({
     runtime: SANDBOX_RUNTIME,
-    timeout: sandboxTimeoutMs(),
+    timeout: timeoutMs ?? sandboxTimeoutMs(),
   });
   await sandbox.runCommand({ cmd: "mkdir", args: ["-p", `${HOME_DIR}/practice`] });
   return sandbox;
+}
+
+/** Stop (reclaim) a sandbox by id. Best-effort: a missing/expired sandbox is
+ *  treated as already gone. Used when a class ends and member machines are
+ *  destroyed. */
+export async function destroySandbox(sandboxId: string): Promise<void> {
+  try {
+    const sb = await Sandbox.get({ sandboxId });
+    await sb.stop();
+  } catch {
+    // Already stopped / expired / not found — nothing to do.
+  }
 }
 
 /** Resume an existing sandbox by id (throws if it cannot be reached). */
@@ -76,6 +102,7 @@ export async function getSandbox(sandboxId: string): Promise<SandboxType> {
  */
 export async function resolveSandbox(
   sandboxId: string | null | undefined,
+  timeoutMs?: number,
 ): Promise<{ sandbox: SandboxType; sandboxId: string; created: boolean }> {
   if (sandboxId) {
     try {
@@ -85,7 +112,7 @@ export async function resolveSandbox(
       // Sandbox expired or is otherwise unreachable — fall through and recreate.
     }
   }
-  const sandbox = await createSandbox();
+  const sandbox = await createSandbox(timeoutMs);
   return { sandbox, sandboxId: sandbox.sandboxId, created: true };
 }
 

@@ -16,7 +16,7 @@
 - **双语课程体系 + 自动判题** —— 12 个从目录导航到 Shell 脚本的实操关卡，每关在沙盒内自动校验。
 - **中英文界面** —— 随时切换语言；所有课程与提示均为双语。
 - **MIT 协议开源** —— 可自由使用、修改与再分发。
-- **登录 + 教师后台（可选）** —— 学生用 GitHub 登录；教师可创建班级、分享邀请码、布置关卡，并查看每名学生的完成度矩阵。所有登录/数据库功能**优雅降级**——未配置时应用仍以匿名模式运行（Cookie 沙盒 + `localStorage` 进度）。
+- **登录 + 教师后台（可选）** —— 学生用 GitHub 登录；教师可创建班级、分享邀请码、设置每班任务与校验命令、运行限时沙盒，并查看每名学生的完成度矩阵。所有登录/数据库功能**优雅降级**——未配置时应用仍以匿名模式运行（Cookie 沙盒 + `localStorage` 进度）。
 
 ---
 
@@ -94,9 +94,11 @@ git push -u origin main
 单人也能使用本实验室，但开启登录后即成为真正的教学工具。将 `NEXT_PUBLIC_AUTH_ENABLED` 设为 `true`（并配置下方环境变量）后，应用将获得：
 
 - **GitHub 登录** —— 学生与教师通过 GitHub OAuth 登录。**第一个登录的人成为教师**，之后登录的均为学生。
-- **班级** —— 教师创建班级后会得到一个简短的**邀请码**，学生凭码加入（无需审批）。
-- **布置作业** —— 教师可为班级勾选 12 个关卡中需要完成的任务。
-- **完成度矩阵** —— 班级页面以「成员 × 已布置关卡」的矩阵展示每关完成 / 未完成，数据来自**服务端进度**（换设备也不会丢失，不同于匿名模式的 `localStorage`）。
+- **班级** —— 教师创建班级后会得到一个简短的**邀请码**，学生凭码加入（无需审批）。该邀请码同时也是授权分配机器的「钥匙」。
+- **纯课堂制** —— 登录用户只有在属于某个**活跃**班级时才会被分配终端；否则不分配机器（游离用户会看到「加入班级」提示）。
+- **教师自定义任务** —— 教师**开堂**时设置一段自由文本**任务**与一个**校验命令**（在学生各自沙盒内执行，退出码 `0` 视为完成）。**没有模拟数据**——任务与判分完全由教师定义；默认班级不携带任何任务，直到教师设置。
+- **限时沙盒** —— 班级**时长**决定每位成员沙盒的存活时间。时间到或教师**下课**时，所有成员的沙盒会同步销毁。
+- **自动判分 + 完成度** —— 学生点击「提交并校验」，校验命令在其真实沙盒内运行，通过与否被记录；班级页面以**完成度矩阵**呈现，数据来自服务端（换设备不丢失）。
 - **按用户的沙盒** —— 登录后，学生的沙盒 id 与其账号绑定，环境可跨设备、跨浏览器跟随（匿名模式仅以 Cookie 绑定沙盒）。
 
 > 未配置这些环境变量时，应用运行在**匿名模式**：每个浏览器获得各自的 Cookie 沙盒，进度存于 `localStorage`。功能不受影响——只是没有身份、班级与教师视图。
@@ -118,7 +120,7 @@ git push -u origin main
    | `GITHUB_CLIENT_SECRET`     | 是   | 来自 GitHub OAuth App               |
    | `DATABASE_URL`             | 是   | Neon Postgres 连接串                |
 
-4. 重新部署。表结构（`users`、`userSandbox`、`userProgress`、`classes`、`classMembers`、`classAssignments`）会在首次请求时自动创建——`ensureSchema()` 是幂等的。
+4. 重新部署。表结构（`users`、`userSandbox`、`userProgress`、`classes`、`classMembers`、`classSubmissions`）会在首次请求时自动创建——`ensureSchema()` 是幂等的。
 
 > Vercel Sandbox SDK 仍会自动读取项目 OIDC Token，课堂模式无需额外沙盒相关环境变量。
 
@@ -152,11 +154,12 @@ app/
     progress/route.ts             # GET/POST 服务端关卡进度
     lesson/start/route.ts         # 执行某关卡的初始化命令
     lesson/verify/route.ts        # 执行某关卡的校验命令
-    classes/route.ts              # 教师：创建班级；GET 我的班级
+    classes/route.ts              # 教师：创建班级（含时长）；GET 我的班级
     classes/join/route.ts         # 学生：凭邀请码加入
-    classes/[id]/route.ts         # 班级详情 + 教师布置关卡
+    classes/[id]/route.ts         # 班级详情 + 教师动作（开堂/下课/设置任务）
+    classes/[id]/submit/route.ts  # 学生：执行校验命令并自动判分
   teacher/page.tsx                # 创建 / 加入 / 列出班级
-  class/[id]/page.tsx             # 每名学生完成度矩阵（教师）
+  class/[id]/page.tsx             # 任务设置、开堂/下课、完成度矩阵
   layout.tsx, page.tsx, globals.css
 auth.ts                           # Auth.js 配置（GitHub、JWT 会话、首登者为教师）
 components/

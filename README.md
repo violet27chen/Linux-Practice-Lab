@@ -16,7 +16,7 @@ Every student session runs inside an isolated, ephemeral **Amazon Linux 2023 mic
 - **Bilingual curriculum with auto-grading** — 12 hands-on lessons from navigation to shell scripting, each verified automatically inside the sandbox.
 - **English + Chinese UI** — switch languages anytime; all lessons and hints are bilingual.
 - **MIT licensed** — free to use, modify, and redistribute.
-- **Login + teacher dashboard (optional)** — students sign in with GitHub; teachers create classes, share an invite code, assign lessons, and see a per-student completion matrix. All auth/DB features **degrade gracefully** — without config the app still runs in anonymous mode (cookie-scoped sandbox + `localStorage` progress).
+- **Login + teacher dashboard (optional)** — students sign in with GitHub; teachers create classes, share an invite code, set a per-class task + verify command, run timed sandboxes, and see a per-student completion matrix. All auth/DB features **degrade gracefully** — without config the app still runs in anonymous mode (cookie-scoped sandbox + `localStorage` progress).
 
 ---
 
@@ -94,9 +94,11 @@ Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_REPO_URL` in the Vercel project envi
 The lab is usable solo, but it becomes a real teaching tool once you enable login. With `NEXT_PUBLIC_AUTH_ENABLED=true` (and the env vars below), the app gains:
 
 - **GitHub sign-in** — students and teachers log in with GitHub OAuth. The **first person to sign in becomes the teacher**; everyone after is a student.
-- **Classes** — a teacher creates a class and gets a short shareable **invite code**. Students join with the code (no approval needed).
-- **Lesson assignment** — the teacher picks which of the 12 lessons are required for a class.
-- **Completion matrix** — the class page shows every member × assigned lesson as done / not-done, sourced from **server-side progress** (survives device switches, unlike the anonymous `localStorage` mode).
+- **Classes** — a teacher creates a class and gets a short shareable **invite code**. Students join with the code (no approval needed). The code also acts as the access key that authorizes a machine.
+- **Pure classroom mode** — a logged-in user only gets a terminal while they are a member of an **active** class. No machine is allocated otherwise (free-floating users see a "join a class" gate).
+- **Teacher-authored tasks** — when the teacher **starts a class (开堂)**, they set a free-text **task** and a **verify command** (a shell command run inside each student's own sandbox; exit code `0` = solved). There is **no mock data** — tasks and grading are fully teacher-defined; by default a class has no task until the teacher sets one.
+- **Timed sandboxes** — the class **duration** drives each member's sandbox lifetime. When time runs out or the teacher **ends the class (下课)**, every member's sandbox is destroyed together.
+- **Auto-grading + completion** — students click **Submit & verify**; the verify command runs in their real sandbox and the pass/fail result is recorded. The class page shows a **completion matrix** from server-side data (survives device switches, unlike the anonymous `localStorage` mode).
 - **Per-user sandbox** — once logged in, a student's sandbox id is stored against their account, so their environment follows them across devices and browsers (anonymous mode keys the sandbox to a cookie only).
 
 > Without these env vars the app runs in **anonymous mode**: each browser gets its own cookie-scoped sandbox and progress is saved in `localStorage`. Nothing breaks — you just don't get identity, classes, or the teacher view.
@@ -118,7 +120,7 @@ The lab is usable solo, but it becomes a real teaching tool once you enable logi
    | `GITHUB_CLIENT_SECRET`    | yes      | from the GitHub OAuth App                          |
    | `DATABASE_URL`            | yes      | Neon Postgres connection string                   |
 
-4. Redeploy. The schema (`users`, `userSandbox`, `userProgress`, `classes`, `classMembers`, `classAssignments`) is created automatically on first request — `ensureSchema()` is idempotent.
+4. Redeploy. The schema (`users`, `userSandbox`, `userProgress`, `classes`, `classMembers`, `classSubmissions`) is created automatically on first request — `ensureSchema()` is idempotent.
 
 > The Vercel Sandbox SDK still reads the project's OIDC token automatically; no sandbox-related env var is needed for classroom mode.
 
@@ -152,11 +154,12 @@ app/
     progress/route.ts            # GET/POST server-side lesson progress
     lesson/start/route.ts        # run a lesson's setup commands
     lesson/verify/route.ts       # run a lesson's verify command
-    classes/route.ts             # teacher: create class; GET my classes
+    classes/route.ts             # teacher: create class (with duration); GET my classes
     classes/join/route.ts        # student: join by invite code
-    classes/[id]/route.ts        # class detail + teacher lesson assignment
+    classes/[id]/route.ts        # class detail + teacher actions (open/close/setTask)
+    classes/[id]/submit/route.ts # student: run verify command, auto-grade
   teacher/page.tsx               # create / join / list classes
-  class/[id]/page.tsx            # per-student completion matrix (teacher)
+  class/[id]/page.tsx            # task setup, open/close, completion matrix
   layout.tsx, page.tsx, globals.css
 auth.ts                          # Auth.js config (GitHub, JWT session, first=tteacher)
 components/

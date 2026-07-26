@@ -45,12 +45,22 @@ export const userProgress = pgTable(
   }),
 );
 
-// A class created by a teacher. Students join with the share `code`.
+// A class created by a teacher. Students join with the share `code` (which also
+// acts as the access key that authorizes a machine). A class is `draft` until the
+// teacher opens it (`active`); `durationMin` drives each member's sandbox lifetime
+// and `endsAt` is when the sandbox is reclaimed. `task` is the teacher-authored
+// prompt and `answerCmd` is the shell command used to auto-grade it.
 export const classes = pgTable("classes", {
   id: serial("id").primaryKey(),
   teacherId: integer("teacher_id").notNull().references(() => users.id),
   name: text("name").notNull(),
   code: text("code").notNull().unique(),
+  durationMin: integer("duration_min").notNull().default(90),
+  task: text("task").notNull().default(""),
+  answerCmd: text("answer_cmd").notNull().default(""),
+  status: text("status").notNull().default("draft"), // "draft" | "active" | "ended"
+  startedAt: timestamp("started_at"),
+  endsAt: timestamp("ends_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -65,15 +75,19 @@ export const classMembers = pgTable(
   }),
 );
 
-// Lessons a teacher has assigned to a class.
-export const classAssignments = pgTable(
-  "class_assignments",
+// Per-student completion of a class task. `done` is set when the student's
+// sandbox passes the class `answerCmd` (auto-graded). Replaces the old
+// fixed-lesson assignment model.
+export const classSubmissions = pgTable(
+  "class_submissions",
   {
     classId: integer("class_id").notNull().references(() => classes.id),
-    lessonId: text("lesson_id").notNull(),
+    userId: integer("user_id").notNull().references(() => users.id),
+    done: boolean("done").notNull().default(false),
+    verifiedAt: timestamp("verified_at"),
   },
   (t) => ({
-    pk: primaryKey({ columns: [t.classId, t.lessonId] }),
+    pk: primaryKey({ columns: [t.classId, t.userId] }),
   }),
 );
 

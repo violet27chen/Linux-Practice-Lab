@@ -138,6 +138,6 @@ lib/
 
 ## 📄 许可证
 
-[MIT](./LICENSE) © 2026 qiyuan
+[MIT](./LICENSE) © 2026 violet27chen
 
 基于 MIT 协议发布 —— 可自由用于个人与商业用途、修改与再分发。

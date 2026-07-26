@@ -138,6 +138,6 @@ Contributions are welcome! Add lessons in `lib/lessons.ts` (keep both `en` and `
 
 ## 📄 License
 
-[MIT](./LICENSE) © 2026 qiyuan
+[MIT](./LICENSE) © 2026 violet27chen
 
 Released under the MIT License — free for personal and commercial use, modification, and redistribution.

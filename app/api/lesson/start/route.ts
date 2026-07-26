@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrCreateSandbox, runCapture, HOME_DIR } from "@/lib/sandbox";
+import { resolveSandbox, runCapture, HOME_DIR } from "@/lib/sandbox";
 import { COOKIE_NAMES, cookieOpts } from "@/lib/cookies";
 import { getLesson } from "@/lib/lessons";
 
@@ -19,18 +19,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unknown lesson" }, { status: 400 });
   }
 
-  const name = req.cookies.get(COOKIE_NAMES.sandbox)?.value;
-  if (!name) {
-    return NextResponse.json(
-      { ok: false, error: "No active session" },
-      { status: 400 },
-    );
-  }
-
+  const cookieSandboxId = req.cookies.get(COOKIE_NAMES.sandbox)?.value ?? null;
   const cwd = req.cookies.get(COOKIE_NAMES.cwd)?.value || DEFAULT_CWD;
 
   try {
-    const sandbox = await getOrCreateSandbox(name);
+    const { sandbox, sandboxId } = await resolveSandbox(cookieSandboxId);
     if (lesson.setup) {
       const lines = lesson.setup
         .split("\n")
@@ -40,10 +33,11 @@ export async function POST(req: NextRequest) {
         await runCapture(sandbox, line, cwd);
       }
     }
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(COOKIE_NAMES.sandbox, sandboxId, cookieOpts());
+    return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true });
 }

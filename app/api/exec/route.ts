@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  newSandboxName,
-  getOrCreateSandbox,
+  resolveSandbox,
   resolveCd,
   execInSandbox,
   HOME_DIR,
@@ -30,14 +29,12 @@ export async function POST(req: NextRequest) {
   }
 
   const command = (body.command ?? "").replace(/\r\n/g, "\n");
-  const name =
-    req.cookies.get(COOKIE_NAMES.sandbox)?.value ?? newSandboxName();
-  let cwd = req.cookies.get(COOKIE_NAMES.cwd)?.value || DEFAULT_CWD;
-  let prev = req.cookies.get(COOKIE_NAMES.prev)?.value || "";
+  const cookieSandboxId = req.cookies.get(COOKIE_NAMES.sandbox)?.value ?? null;
+  const cwd = req.cookies.get(COOKIE_NAMES.cwd)?.value || DEFAULT_CWD;
+  const prev = req.cookies.get(COOKIE_NAMES.prev)?.value || "";
 
   if (command.trim() === "") {
     const res = new NextResponse(null, { status: 204 });
-    res.cookies.set(COOKIE_NAMES.sandbox, name, cookieOpts());
     res.cookies.set(COOKIE_NAMES.cwd, cwd, cookieOpts());
     return res;
   }
@@ -45,17 +42,31 @@ export async function POST(req: NextRequest) {
   const cd = resolveCd(command, cwd, prev || null, HOME_DIR);
   if (cd) {
     const res = new NextResponse(null, { status: 204 });
-    res.cookies.set(COOKIE_NAMES.sandbox, name, cookieOpts());
     res.cookies.set(COOKIE_NAMES.cwd, cd.cwd, cookieOpts());
     res.cookies.set(COOKIE_NAMES.prev, cd.prev, cookieOpts());
     return res;
+  }
+
+  // Resolve the sandbox up front so we know the (possibly new) id synchronously
+  // and can persist it in the Set-Cookie header before the body is streamed.
+  let sandbox;
+  let sandboxId: string;
+  try {
+    const resolved = await resolveSandbox(cookieSandboxId);
+    sandbox = resolved.sandbox;
+    sandboxId = resolved.sandboxId;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return new NextResponse(`\r\n[error] ${message}\r\n`, {
+      status: 500,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const sandbox = await getOrCreateSandbox(name);
         const stdout = createStreamWritable(controller);
         const stderr = createStreamWritable(controller);
         const exitCode = await execInSandbox(
@@ -83,7 +94,7 @@ export async function POST(req: NextRequest) {
       "X-Accel-Buffering": "no",
     },
   });
-  res.cookies.set(COOKIE_NAMES.sandbox, name, cookieOpts());
+  res.cookies.set(COOKIE_NAMES.sandbox, sandboxId, cookieOpts());
   res.cookies.set(COOKIE_NAMES.cwd, cwd, cookieOpts());
   return res;
 }

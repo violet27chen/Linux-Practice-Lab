@@ -220,7 +220,7 @@ export const lessons: Lesson[] = [
       'test -f count.txt && test "$(cat count.txt | tr -d " ")" = "$(wc -l < data.txt | tr -d " ")"',
     hints: [
       { en: "wc -l < data.txt", zh: "wc -l < data.txt" },
-      { en: "echo "$(wc -l < data.txt)" > count.txt", zh: "echo \"$(wc -l < data.txt)\" > count.txt" },
+      { en: "echo \"$(wc -l < data.txt)\" > count.txt", zh: "echo \"$(wc -l < data.txt)\" > count.txt" },
     ],
     solution: {
       en: "wc -l < data.txt > count.txt",

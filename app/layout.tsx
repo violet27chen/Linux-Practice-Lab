@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { LangProvider } from "@/components/LangProvider";
-import { Header } from "@/components/Header";
+import Header from "@/components/Header";
 
 export const metadata: Metadata = {
   title: "Linux Practice Lab — learn Linux in your browser",

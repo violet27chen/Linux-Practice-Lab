@@ -1,19 +1,35 @@
-import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import type { ReadableStreamDefaultController } from "stream/web";
 import { Sandbox, type Sandbox as SandboxType } from "@vercel/sandbox";
 import { HOME_DIR, resolveCd } from "./path-util";
 
+// Re-export for server-side consumers (API routes import these from lib/sandbox).
+export { HOME_DIR, resolveCd };
+
 /**
  * Server-side sandbox lifecycle for the Linux practice lab.
  *
- * Each browser session owns exactly one persistent Vercel Sandbox, identified
- * by a random name stored in an httpOnly cookie. The SDK resumes the same
- * microVM across requests (filesystem snapshot is restored automatically), so
- * a student's files and working directory survive between commands.
+ * Each browser session owns exactly one Vercel Sandbox, identified by its
+ * `sandboxId` stored in an httpOnly cookie. We resume the same microVM across
+ * requests with `Sandbox.get({ sandboxId })`; if it can no longer be reached
+ * (expired / stopped), we transparently create a fresh one. A student's files
+ * and working directory survive for the lifetime of the sandbox.
+ *
+ * NOTE: @vercel/sandbox v1.x exposes `Sandbox.create()` and
+ * `Sandbox.get({ sandboxId })` — there is no name-based `getOrCreate`, so we
+ * implement that pattern ourselves on top of the sandbox id.
  */
 
 export const SANDBOX_RUNTIME = "node22" as const;
+
+/**
+ * Sandbox wall-clock lifetime in milliseconds. Vercel caps this at 45 min on
+ * Hobby and 5 h on Pro. Override with SANDBOX_TIMEOUT_MS.
+ */
+export function sandboxTimeoutMs(): number {
+  const fromEnv = Number(process.env.SANDBOX_TIMEOUT_MS);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 20 * 60_000;
+}
 
 /**
  * Hard wall-clock guard so a hung/interactive program cannot block a request.
@@ -24,29 +40,40 @@ export function commandTimeoutMs(): number {
   return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 60_000;
 }
 
-export function newSandboxName(): string {
-  const id = randomUUID().replace(/-/g, "").slice(0, 24);
-  return `lp-${id}`;
+/** Create a brand-new sandbox and prepare a friendly working directory. */
+export async function createSandbox(): Promise<SandboxType> {
+  const sandbox = await Sandbox.create({
+    runtime: SANDBOX_RUNTIME,
+    timeout: sandboxTimeoutMs(),
+  });
+  await sandbox.runCommand({ cmd: "mkdir", args: ["-p", `${HOME_DIR}/practice`] });
+  return sandbox;
 }
 
-export async function getOrCreateSandbox(name: string): Promise<SandboxType> {
-  return Sandbox.getOrCreate({
-    name,
-    runtime: SANDBOX_RUNTIME,
-    onCreate: async (sbx) => {
-      // Fresh environment: create a friendly working directory.
-      await sbx.runCommand({ cmd: "mkdir", args: ["-p", `${HOME_DIR}/practice`] });
-    },
-  });
+/** Resume an existing sandbox by id (throws if it cannot be reached). */
+export async function getSandbox(sandboxId: string): Promise<SandboxType> {
+  return Sandbox.get({ sandboxId });
 }
 
 /**
- * Resolve a `cd` command against the current directory WITHOUT executing it,
- * so the working directory persists across HTTP requests (the sandbox has no
- * long-lived interactive shell). Implemented in ./path-util (shared with the
- * browser terminal) and re-exported here for the server.
+ * Resolve the session's sandbox from the cookie id: reuse it when possible,
+ * otherwise create a fresh one. Returns the sandbox plus its (possibly new) id
+ * and whether it was just created, so the caller can refresh the cookie.
  */
-export { resolveCd };
+export async function resolveSandbox(
+  sandboxId: string | null | undefined,
+): Promise<{ sandbox: SandboxType; sandboxId: string; created: boolean }> {
+  if (sandboxId) {
+    try {
+      const sandbox = await getSandbox(sandboxId);
+      return { sandbox, sandboxId, created: false };
+    } catch {
+      // Sandbox expired or is otherwise unreachable — fall through and recreate.
+    }
+  }
+  const sandbox = await createSandbox();
+  return { sandbox, sandboxId: sandbox.sandboxId, created: true };
+}
 
 /** Streaming writer that forwards sandbox output chunks to a web ReadableStream. */
 export function createStreamWritable(

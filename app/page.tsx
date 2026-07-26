@@ -1,14 +1,14 @@
 "use client";
 
-import { Terminal } from "@/components/Terminal";
-import { LessonPanel } from "@/components/LessonPanel";
+import Terminal from "@/components/Terminal";
+import LessonPanel from "@/components/LessonPanel";
 import { useLang } from "@/components/LangProvider";
 
 export default function Page() {
   const { t } = useLang();
   const repoUrl =
     process.env.NEXT_PUBLIC_REPO_URL ||
-    "https://github.com/qiyuan/linux-practice";
+    "https://github.com/violet27chen/Linux-Practice-Lab";
 
   return (
     <div className="page">

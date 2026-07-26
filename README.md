@@ -16,6 +16,7 @@ Every student session runs inside an isolated, ephemeral **Amazon Linux 2023 mic
 - **Bilingual curriculum with auto-grading** — 12 hands-on lessons from navigation to shell scripting, each verified automatically inside the sandbox.
 - **English + Chinese UI** — switch languages anytime; all lessons and hints are bilingual.
 - **MIT licensed** — free to use, modify, and redistribute.
+- **Login + teacher dashboard (optional)** — students sign in with GitHub; teachers create classes, share an invite code, assign lessons, and see a per-student completion matrix. All auth/DB features **degrade gracefully** — without config the app still runs in anonymous mode (cookie-scoped sandbox + `localStorage` progress).
 
 ---
 
@@ -88,6 +89,41 @@ Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_REPO_URL` in the Vercel project envi
 
 ---
 
+## 🧑‍🏫 Classroom mode (teachers)
+
+The lab is usable solo, but it becomes a real teaching tool once you enable login. With `NEXT_PUBLIC_AUTH_ENABLED=true` (and the env vars below), the app gains:
+
+- **GitHub sign-in** — students and teachers log in with GitHub OAuth. The **first person to sign in becomes the teacher**; everyone after is a student.
+- **Classes** — a teacher creates a class and gets a short shareable **invite code**. Students join with the code (no approval needed).
+- **Lesson assignment** — the teacher picks which of the 12 lessons are required for a class.
+- **Completion matrix** — the class page shows every member × assigned lesson as done / not-done, sourced from **server-side progress** (survives device switches, unlike the anonymous `localStorage` mode).
+- **Per-user sandbox** — once logged in, a student's sandbox id is stored against their account, so their environment follows them across devices and browsers (anonymous mode keys the sandbox to a cookie only).
+
+> Without these env vars the app runs in **anonymous mode**: each browser gets its own cookie-scoped sandbox and progress is saved in `localStorage`. Nothing breaks — you just don't get identity, classes, or the teacher view.
+
+### Enable it
+
+1. Create a **GitHub OAuth App** (GitHub → Settings → Developer settings → OAuth Apps → New OAuth App).
+   - **Homepage URL:** `https://<your-domain>` (e.g. `https://linux.qiyuan.icu`)
+   - **Authorization callback URL:** `https://<your-domain>/api/auth/callback/github`
+   - Copy the **Client ID** and generate a **Client Secret**.
+2. Create a **Neon Postgres** database (free tier). Copy the connection string (use the pooled `*-pooler*` endpoint).
+3. Set these environment variables in the Vercel dashboard (or copy `.env.example` → `.env.local`):
+
+   | Variable                  | Required | Notes                                              |
+   | ------------------------- | -------- | -------------------------------------------------- |
+   | `NEXT_PUBLIC_AUTH_ENABLED` | yes      | Set to `true` to turn on login + classroom features. |
+   | `AUTH_SECRET`             | yes      | `openssl rand -base64 32`                          |
+   | `GITHUB_CLIENT_ID`        | yes      | from the GitHub OAuth App                          |
+   | `GITHUB_CLIENT_SECRET`    | yes      | from the GitHub OAuth App                          |
+   | `DATABASE_URL`            | yes      | Neon Postgres connection string                   |
+
+4. Redeploy. The schema (`users`, `userSandbox`, `userProgress`, `classes`, `classMembers`, `classAssignments`) is created automatically on first request — `ensureSchema()` is idempotent.
+
+> The Vercel Sandbox SDK still reads the project's OIDC token automatically; no sandbox-related env var is needed for classroom mode.
+
+---
+
 ## 📚 Lessons
 
 | Level | Topic             | Lessons                                                  |
@@ -109,21 +145,37 @@ Each lesson has setup commands (run on "Set up environment") and a `verify` comm
 ```text
 app/
   api/
-    session/route.ts     # create/resume/reset a sandbox (cookie)
-    exec/route.ts        # stream a command through the sandbox
-    lesson/start.ts      # run a lesson's setup commands
-    lesson/verify.ts     # run a lesson's verify command
+    auth/[...nextauth]/route.ts  # Auth.js (GitHub OAuth) handlers
+    session/route.ts             # create/resume/reset a sandbox (cookie or DB)
+    exec/route.ts                # stream a command through the sandbox
+    complete/route.ts            # run tab-completion via bash compgen
+    progress/route.ts            # GET/POST server-side lesson progress
+    lesson/start/route.ts        # run a lesson's setup commands
+    lesson/verify/route.ts       # run a lesson's verify command
+    classes/route.ts             # teacher: create class; GET my classes
+    classes/join/route.ts        # student: join by invite code
+    classes/[id]/route.ts        # class detail + teacher lesson assignment
+  teacher/page.tsx               # create / join / list classes
+  class/[id]/page.tsx            # per-student completion matrix (teacher)
   layout.tsx, page.tsx, globals.css
+auth.ts                          # Auth.js config (GitHub, JWT session, first=tteacher)
 components/
-  Terminal.tsx           # xterm.js terminal + line editor + history
-  LessonPanel.tsx        # bilingual lesson list, hints, solution, verify
-  Header.tsx, LangProvider.tsx
+  Terminal.tsx                   # xterm.js terminal + line editor + history
+  LessonPanel.tsx                # bilingual lesson list, hints, solution, verify
+  Header.tsx, AuthButton.tsx     # header + GitHub sign-in / teacher nav
+  LangProvider.tsx
+db/
+  schema.ts                      # Drizzle tables (users, sandbox, progress, classes…)
+  index.ts                       # neon() http client; db is null when DATABASE_URL missing
+  ensure.ts                      # idempotent CREATE TABLE IF NOT EXISTS
 lib/
-  sandbox.ts             # Vercel Sandbox lifecycle + streaming exec
-  lessons.ts             # bilingual curriculum (setup/verify/hints)
-  i18n.ts                # UI string dictionary (en primary, zh secondary)
-  path-util.ts           # client-safe cwd / `cd` resolver (shared)
-  cookies.ts             # session cookie names + options
+  sandbox.ts                     # Vercel Sandbox lifecycle + streaming exec
+  identity.ts                    # resolve user id; load/save sandbox to DB or cookie
+  lessons.ts                     # bilingual curriculum (setup/verify/hints)
+  i18n.ts                        # UI string dictionary (en primary, zh secondary)
+  path-util.ts                   # client-safe cwd / `cd` resolver (shared)
+  cookies.ts                     # session cookie names + options
+types/next-auth.d.ts             # Session.userId / role augmentation
 ```
 
 The UI is bilingual: `lib/i18n.ts` holds UI strings (English primary), and `lib/lessons.ts` holds lesson content in both languages. Toggle with the **EN / 中文** switch in the header.

@@ -2,10 +2,13 @@
 
 import { TerminalWindow, GithubLogo } from "@phosphor-icons/react";
 import { useLang } from "@/components/LangProvider";
+import AuthButton from "@/components/AuthButton";
 
 const REPO_URL =
   process.env.NEXT_PUBLIC_REPO_URL ||
   "https://github.com/violet27chen/Linux-Practice-Lab";
+
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 export default function Header() {
   const { t, lang, setLang } = useLang();
@@ -19,6 +22,11 @@ export default function Header() {
         <span className="brand-sub">{t("appSubtitle")}</span>
       </div>
       <div className="header-right">
+        {AUTH_ENABLED && (
+          <a className="nav-link" href="/teacher">
+            {t("teacherDashboard")}
+          </a>
+        )}
         <div className="lang-switch" role="group" aria-label={t("language")}>
           <button
             className={lang === "en" ? "active" : ""}
@@ -44,6 +52,7 @@ export default function Header() {
         >
           <GithubLogo size={18} weight="bold" />
         </a>
+        <AuthButton />
       </div>
     </header>
   );

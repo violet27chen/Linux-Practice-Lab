@@ -20,6 +20,7 @@ type SetupState = "idle" | "doing" | "done" | "error";
 type VerifyResult = { passed: boolean; stdout?: string; stderr?: string };
 
 const DONE_KEY = "lp_done";
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 function loadDone(): string[] {
   if (typeof window === "undefined") return [];
@@ -42,22 +43,69 @@ export default function LessonPanel() {
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [done, setDone] = useState<string[]>([]);
+  const [serverMode, setServerMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setDone(loadDone());
+    let cancelled = false;
+    async function init() {
+      if (!AUTH_ENABLED) {
+        if (!cancelled) {
+          setServerMode(false);
+          setDone(loadDone());
+        }
+        return;
+      }
+      // Logged in? Then progress lives on the server (survives devices/cookie clears).
+      try {
+        const s = await fetch("/api/auth/session").then((r) =>
+          r.ok ? r.json() : null,
+        );
+        if (s?.userId) {
+          const p = await fetch("/api/progress").then((r) =>
+            r.ok ? r.json() : null,
+          );
+          if (!cancelled) {
+            setServerMode(true);
+            setDone(Array.isArray(p?.done) ? p.done : []);
+          }
+          return;
+        }
+      } catch {
+        /* fall through to anonymous */
+      }
+      if (!cancelled) {
+        setServerMode(false);
+        setDone(loadDone());
+      }
+    }
+    init();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function markDone(id: string) {
     setDone((prev) => {
       if (prev.includes(id)) return prev;
       const next = [...prev, id];
-      try {
-        localStorage.setItem(DONE_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore quota errors */
+      if (!serverMode) {
+        try {
+          localStorage.setItem(DONE_KEY, JSON.stringify(next));
+        } catch {
+          /* ignore quota errors */
+        }
       }
       return next;
     });
+    if (serverMode) {
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lessonId: id, done: true }),
+      }).catch(() => {
+        /* ignore */
+      });
+    }
   }
 
   const levels = Array.from(new Set(lessons.map((l) => l.level))).sort(

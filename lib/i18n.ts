@@ -49,7 +49,39 @@ export type UIKey =
   | "statusReady"
   | "statusError"
   | "progressLabel"
-  | "passedShort";
+  | "passedShort"
+  | "signIn"
+  | "signOut"
+  | "teacherDashboard"
+  | "myClasses"
+  | "newClass"
+  | "joinClass"
+  | "classNamePlaceholder"
+  | "classCodePlaceholder"
+  | "join"
+  | "create"
+  | "membersLabel"
+  | "assignmentsLabel"
+  | "copyCode"
+  | "copied"
+  | "noClassesYet"
+  | "authNotConfigured"
+  | "viewClass"
+  | "assignedLessons"
+  | "studentProgress"
+  | "backToClasses"
+  | "roleTeacher"
+  | "roleStudent"
+  | "needSignIn"
+  | "classCode"
+  | "shareCodeHint"
+  | "assignLesson"
+  | "assigned"
+  | "notAssigned"
+  | "lesson"
+  | "name"
+  | "progress"
+  | "you";
 
 export const ui: Record<UIKey, { en: string; zh: string }> = {
   appTitle: {
@@ -121,6 +153,50 @@ export const ui: Record<UIKey, { en: string; zh: string }> = {
   statusError: { en: "error", zh: "错误" },
   progressLabel: { en: "completed", zh: "已完成" },
   passedShort: { en: "Passed", zh: "已通过" },
+  signIn: { en: "Sign in", zh: "登录" },
+  signOut: { en: "Sign out", zh: "退出" },
+  teacherDashboard: { en: "Classes", zh: "班级" },
+  myClasses: { en: "My classes", zh: "我的班级" },
+  newClass: { en: "New class", zh: "新建班级" },
+  joinClass: { en: "Join a class", zh: "加入班级" },
+  classNamePlaceholder: { en: "Class name", zh: "班级名称" },
+  classCodePlaceholder: { en: "Class code", zh: "班级邀请码" },
+  join: { en: "Join", zh: "加入" },
+  create: { en: "Create", zh: "创建" },
+  membersLabel: { en: "Students", zh: "学生" },
+  assignmentsLabel: { en: "Assigned", zh: "已布置" },
+  copyCode: { en: "Copy invite code", zh: "复制邀请码" },
+  copied: { en: "Copied", zh: "已复制" },
+  noClassesYet: {
+    en: "No classes yet. Create one or join with a code.",
+    zh: "还没有班级，新建一个或输入邀请码加入。",
+  },
+  authNotConfigured: {
+    en: "Sign-in is not configured on this deployment yet. Set AUTH_SECRET + GitHub OAuth + DATABASE_URL to enable it.",
+    zh: "此部署尚未配置登录。请设置 AUTH_SECRET、GitHub OAuth 与 DATABASE_URL 以启用。",
+  },
+  viewClass: { en: "Open", zh: "打开" },
+  assignedLessons: { en: "Assigned lessons", zh: "已布置课程" },
+  studentProgress: { en: "Student progress", zh: "学生进度" },
+  backToClasses: { en: "Back to classes", zh: "返回班级列表" },
+  roleTeacher: { en: "Teacher", zh: "老师" },
+  roleStudent: { en: "Student", zh: "学生" },
+  needSignIn: {
+    en: "Sign in with GitHub to track progress and use classes.",
+    zh: "用 GitHub 登录以保存进度并使用班级功能。",
+  },
+  classCode: { en: "Invite code", zh: "邀请码" },
+  shareCodeHint: {
+    en: "Share this code with students so they can join.",
+    zh: "把这个码发给学生，他们就能加入。",
+  },
+  assignLesson: { en: "Assign lesson", zh: "布置课程" },
+  assigned: { en: "done", zh: "已完成" },
+  notAssigned: { en: "todo", zh: "未完成" },
+  lesson: { en: "Lesson", zh: "课程" },
+  name: { en: "Name", zh: "名称" },
+  progress: { en: "Progress", zh: "进度" },
+  you: { en: "You", zh: "我" },
   level: { en: "Level", zh: "关卡" },
   objective: { en: "Goal", zh: "目标" },
   instructions: { en: "Instructions", zh: "任务说明" },

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Writable } from "node:stream";
-import { resolveSandbox, createSandbox, isGoneError, HOME_DIR } from "@/lib/sandbox";
+import {
+  resolveSandbox,
+  createSandbox,
+  isGoneError,
+  HOME_DIR,
+} from "@/lib/sandbox";
+import { ensureSchema } from "@/db/ensure";
+import { resolveUserId, getDbSandbox, saveDbSandbox } from "@/lib/identity";
 import { COOKIE_NAMES, cookieOpts } from "@/lib/cookies";
 
 export const runtime = "nodejs";
@@ -10,15 +17,9 @@ const DEFAULT_CWD = `${HOME_DIR}/practice`;
 
 /**
  * Tab-completion backend for the custom terminal line editor.
- *
- * The terminal is NOT a real PTY — the client sends whole lines to /api/exec.
- * So completion must live here: we ask the sandbox's bash for candidates via
- * `compgen` (file/path for arguments, command/alias/builtin/keyword for the
- * first token), mark directories with a trailing slash, and return them.
- *
- * The completion word itself is passed as an argv element (`$1`), never
- * string-interpolated into the shell, so there is no injection surface. The
- * script body is a static template with no user data in it.
+ * Mirrors the exec route's identity resolution: logged-in users use their DB
+ * sandbox id, anonymous users use the cookie. Recreates a reused sandbox once
+ * on a 410 (expired) and persists the new id.
  */
 const SCRIPT = `
 if [ "$2" = "cmd" ]; then
@@ -50,11 +51,20 @@ export async function POST(req: NextRequest) {
   const cookieSandboxId = req.cookies.get(COOKIE_NAMES.sandbox)?.value ?? null;
   const cwd = req.cookies.get(COOKIE_NAMES.cwd)?.value || DEFAULT_CWD;
 
+  try {
+    await ensureSchema();
+  } catch {
+    /* db not configured -> anonymous mode */
+  }
+
+  const userId = await resolveUserId();
+  const dbSb = userId ? await getDbSandbox(userId) : null;
+  const effectiveId = dbSb?.sandboxId ?? cookieSandboxId ?? null;
+
   const before = line.slice(0, cursor);
   const m = before.match(/(\S*)$/);
   const word = m ? m[1] : "";
   const trimmed = before.trim();
-  // Command position when the only token typed so far is the one being completed.
   const isCommand = trimmed === word;
   const firstToken = trimmed.split(/\s+/)[0] ?? "";
   const dirsOnly = firstToken === "cd" || firstToken === "pushd";
@@ -63,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   let resolved: Awaited<ReturnType<typeof resolveSandbox>>;
   try {
-    resolved = await resolveSandbox(cookieSandboxId);
+    resolved = await resolveSandbox(effectiveId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new NextResponse(`[error] ${message}`, { status: 500 });
@@ -90,11 +100,14 @@ export async function POST(req: NextRequest) {
     try {
       await runCompletion(resolved.sandbox);
     } catch (err) {
-      // A reused sandbox can expire between requests (HTTP 410). Recreate and
-      // retry exactly once; a freshly created sandbox should not 410.
       if (isGoneError(err) && !resolved.created) {
         const fresh = await createSandbox();
-        resolved = { sandbox: fresh, sandboxId: fresh.sandboxId, created: true };
+        if (userId) await saveDbSandbox(userId, fresh.sandboxId, cwd);
+        resolved = {
+          sandbox: fresh,
+          sandboxId: fresh.sandboxId,
+          created: true,
+        };
         await runCompletion(fresh);
       } else {
         throw err;
@@ -127,6 +140,7 @@ export async function POST(req: NextRequest) {
 
   const res = NextResponse.json({ ok: true, candidates, isCommand });
   if (resolved.created) {
+    if (userId) await saveDbSandbox(userId, resolved.sandboxId, cwd);
     res.cookies.set(COOKIE_NAMES.sandbox, resolved.sandboxId, cookieOpts());
     res.cookies.set(COOKIE_NAMES.cwd, DEFAULT_CWD, cookieOpts());
   }

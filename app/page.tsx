@@ -66,38 +66,67 @@ export default function Page() {
   const [status, setStatus] = useState<SessionStatus>("connecting");
   const [gate, setGate] = useState<Gate>(AUTH_ENABLED ? "checking" : "ok");
   const [classInfo, setClassInfo] = useState<ClassInfo | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinMsg, setJoinMsg] = useState<string | null>(null);
+  const [joined, setJoined] = useState(false);
+
+  // Resolve the gate: logged in? in an active class? Sets `gate` + `classInfo`.
+  async function checkAccess() {
+    const s = await fetch("/api/auth/session").then((r) =>
+      r.ok ? r.json() : null,
+    );
+    if (!s?.userId) {
+      setGate("login");
+      return;
+    }
+    const r = await fetch("/api/session", { method: "POST" }).then((r) =>
+      r.json(),
+    );
+    if (r.needLogin) {
+      setGate("login");
+    } else if (r.needClass) {
+      setGate("class");
+    } else if (r.ok && r.class) {
+      setClassInfo(r.class);
+      setGate("ok");
+    } else {
+      setGate("class");
+    }
+  }
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
-    let cancelled = false;
-    (async () => {
-      const s = await fetch("/api/auth/session").then((r) =>
-        r.ok ? r.json() : null,
-      );
-      if (!s?.userId) {
-        if (!cancelled) setGate("login");
-        return;
-      }
-      const r = await fetch("/api/session", { method: "POST" }).then((r) =>
-        r.json(),
-      );
-      if (r.needLogin) {
-        if (!cancelled) setGate("login");
-      } else if (r.needClass) {
-        if (!cancelled) setGate("class");
-      } else if (r.ok && r.class) {
-        if (!cancelled) {
-          setClassInfo(r.class);
-          setGate("ok");
-        }
-      } else {
-        if (!cancelled) setGate("class");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    checkAccess();
   }, []);
+
+  // Student enters the teacher's invite code (the key) right on the gate.
+  async function joinClass() {
+    if (!joinCode.trim() || joinBusy) return;
+    setJoinBusy(true);
+    setJoinMsg(null);
+    try {
+      const r = await fetch("/api/classes/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: joinCode.trim() }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        setJoined(true);
+        setJoinCode("");
+        await checkAccess(); // flips to "ok" if the class is already live
+      } else {
+        setJoinMsg(
+          d.error === "class not found" ? t("invalidCode") : t("needClass"),
+        );
+      }
+    } catch {
+      setJoinMsg(t("needClass"));
+    } finally {
+      setJoinBusy(false);
+    }
+  }
 
   const statusLabel =
     status === "ready"
@@ -203,7 +232,7 @@ export default function Page() {
     );
   }
 
-  // Logged in but no active class → ask to join one.
+  // Logged in but no active class → enter the teacher's key (invite code) here.
   return (
     <div className="workspace">
       <section className="panel gate-panel">
@@ -213,9 +242,27 @@ export default function Page() {
           </span>
           <h2>{t("needClass")}</h2>
           <p className="gate-hint">{t("gateClassHint")}</p>
-          <a className="btn primary block" href="/teacher">
-            {t("teacherDashboard")}
-          </a>
+          <div className="join-box">
+            <input
+              className="text-input"
+              placeholder={t("classCodePlaceholder")}
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && joinClass()}
+              disabled={joinBusy}
+            />
+            <button
+              className="btn primary"
+              onClick={joinClass}
+              disabled={joinBusy || !joinCode.trim()}
+            >
+              {t("join")}
+            </button>
+          </div>
+          {joined && (
+            <p className="setup-note ok">{t("joinedWaiting")}</p>
+          )}
+          {joinMsg && <p className="gate-foot err">{joinMsg}</p>}
           <p className="gate-foot">{t("rejoinHint")}</p>
         </div>
       </section>

@@ -1178,6 +1178,24 @@ button {
   margin: 0;
 }
 
+.gate-foot.err {
+  color: var(--danger);
+}
+
+.join-box {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.join-box .text-input {
+  flex: 1;
+  text-align: center;
+  letter-spacing: 1px;
+  font-family: var(--font-mono);
+}
+
 /* block + danger button variants */
 .btn.block {
   width: 100%;

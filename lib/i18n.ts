@@ -117,7 +117,9 @@ export type UIKey =
   | "taskUpdated"
   | "durationMinLabel"
   | "completionLabel"
-  | "studentCount";
+  | "studentCount"
+  | "joinedWaiting"
+  | "invalidCode";
 
 export const ui: Record<UIKey, { en: string; zh: string }> = {
   appTitle: {
@@ -319,6 +321,14 @@ export const ui: Record<UIKey, { en: string; zh: string }> = {
   durationMinLabel: { en: "Class duration (minutes)", zh: "课堂时长（分钟）" },
   completionLabel: { en: "Completion", zh: "完成情况" },
   studentCount: { en: "Students", zh: "学生" },
+  joinedWaiting: {
+    en: "Joined. Waiting for the teacher to start the class — your sandbox appears automatically once it's live.",
+    zh: "已加入。等待老师开堂——开堂后终端会自动出现。",
+  },
+  invalidCode: {
+    en: "That invite code wasn't found. Check it with your teacher.",
+    zh: "找不到该邀请码，请向老师确认。",
+  },
 };
 
 export function t(key: UIKey, lang: Lang): string {

@@ -1,8 +1,15 @@
 "use client";
 
-import Terminal from "@/components/Terminal";
+import dynamic from "next/dynamic";
 import LessonPanel from "@/components/LessonPanel";
 import { useLang } from "@/components/LangProvider";
+
+// xterm.js touches the browser global `self` at module load, which crashes
+// server prerendering. Load the terminal client-side only.
+const Terminal = dynamic(() => import("@/components/Terminal"), {
+  ssr: false,
+  loading: () => <div className="xterm-host" />,
+});
 
 export default function Page() {
   const { t } = useLang();

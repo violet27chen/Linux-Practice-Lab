@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Writable } from "node:stream";
-import { resolveSandbox, HOME_DIR } from "@/lib/sandbox";
+import { resolveSandbox, createSandbox, isGoneError, HOME_DIR } from "@/lib/sandbox";
 import { COOKIE_NAMES, cookieOpts } from "@/lib/cookies";
 
 export const runtime = "nodejs";
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const mode = isCommand ? "cmd" : "arg";
   const dirFlag = dirsOnly ? "dir" : "file";
 
-  let resolved;
+  let resolved: Awaited<ReturnType<typeof resolveSandbox>>;
   try {
     resolved = await resolveSandbox(cookieSandboxId);
   } catch (err) {
@@ -77,14 +77,29 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  try {
-    await resolved.sandbox.runCommand({
+  const runCompletion = (sb: typeof resolved.sandbox) =>
+    sb.runCommand({
       cmd: "bash",
       args: ["-lc", SCRIPT, "sh", word, mode, dirFlag],
       cwd,
       stdout: cap,
       stderr: cap,
     });
+
+  try {
+    try {
+      await runCompletion(resolved.sandbox);
+    } catch (err) {
+      // A reused sandbox can expire between requests (HTTP 410). Recreate and
+      // retry exactly once; a freshly created sandbox should not 410.
+      if (isGoneError(err) && !resolved.created) {
+        const fresh = await createSandbox();
+        resolved = { sandbox: fresh, sandboxId: fresh.sandboxId, created: true };
+        await runCompletion(fresh);
+      } else {
+        throw err;
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new NextResponse(`[error] ${message}`, { status: 500 });

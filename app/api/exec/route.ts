@@ -3,6 +3,8 @@ import {
   resolveSandbox,
   resolveCd,
   execInSandbox,
+  createSandbox,
+  isGoneError,
   HOME_DIR,
   createStreamWritable,
 } from "@/lib/sandbox";
@@ -51,10 +53,12 @@ export async function POST(req: NextRequest) {
   // and can persist it in the Set-Cookie header before the body is streamed.
   let sandbox;
   let sandboxId: string;
+  let reused = false;
   try {
     const resolved = await resolveSandbox(cookieSandboxId);
     sandbox = resolved.sandbox;
     sandboxId = resolved.sandboxId;
+    reused = !resolved.created; // a reused sandbox may have expired -> retry once
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new NextResponse(`\r\n[error] ${message}\r\n`, {
@@ -69,14 +73,27 @@ export async function POST(req: NextRequest) {
       try {
         const stdout = createStreamWritable(controller);
         const stderr = createStreamWritable(controller);
-        const exitCode = await execInSandbox(
-          sandbox,
-          command,
-          cwd,
-          stdout,
-          stderr,
-        );
-        controller.enqueue(encoder.encode(`\u0000LP:EXIT=${exitCode}\u0000`));
+        try {
+          const exitCode = await execInSandbox(
+            sandbox,
+            command,
+            cwd,
+            stdout,
+            stderr,
+          );
+          controller.enqueue(encoder.encode(`\u0000LP:EXIT=${exitCode}\u0000`));
+        } catch (err) {
+          // A reused sandbox can expire between requests (HTTP 410). Recreate a
+          // fresh one and retry exactly once; a brand-new sandbox should not 410.
+          if (isGoneError(err) && reused) {
+            const fresh = await createSandbox();
+            sandboxId = fresh.sandboxId;
+            await execInSandbox(fresh, command, cwd, stdout, stderr);
+            controller.enqueue(encoder.encode(`\u0000LP:EXIT=0\u0000`));
+          } else {
+            throw err;
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         controller.enqueue(encoder.encode(`\r\n[error] ${message}\r\n`));

@@ -28,7 +28,21 @@ export const SANDBOX_RUNTIME = "node22" as const;
  */
 export function sandboxTimeoutMs(): number {
   const fromEnv = Number(process.env.SANDBOX_TIMEOUT_MS);
-  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 20 * 60_000;
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 45 * 60_000;
+}
+
+/**
+ * True when an error means the sandbox is gone and must be recreated.
+ *
+ * @vercel/sandbox's base API client throws `Status code 410 is not ok`
+ * (base-client.js:86) — and similar 4xx — when the underlying microVM has
+ * expired or been reclaimed. `Sandbox.get` returns a proxy for such a sandbox
+ * WITHOUT checking liveness, so the failure only surfaces at `runCommand`
+ * time. We use this predicate to transparently recreate + retry there.
+ */
+export function isGoneError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /\b410\b|\bgone\b|status code 4\d\d/i.test(msg);
 }
 
 /**

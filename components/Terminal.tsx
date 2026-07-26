@@ -11,11 +11,19 @@ import { HOME_DIR, resolveCd, promptCwd } from "@/lib/path-util";
 const DEFAULT_CWD = `${HOME_DIR}/practice`;
 const EXIT_MARK = "\u0000LP:EXIT=";
 
-export default function Terminal() {
+export type SessionStatus = "connecting" | "ready" | "error";
+
+export default function Terminal({
+  onStatus,
+}: {
+  onStatus?: (s: SessionStatus) => void;
+}) {
   const { t } = useLang();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
 
   // Input/state kept in refs so the key handler never reads stale closures.
   const cwdRef = useRef(DEFAULT_CWD);
@@ -26,7 +34,11 @@ export default function Terminal() {
   const executingRef = useRef(false);
 
   function promptStr(): string {
-    return `vercel-sandbox@linux:${promptCwd(cwdRef.current)}$`;
+    // emerald user@host, zinc-blue cwd, matching the page accent system
+    return (
+      "\x1b[38;2;52;211;153mstudent@lab\x1b[0m:" +
+      `\x1b[38;2;96;165;250m${promptCwd(cwdRef.current)}\x1b[0m$`
+    );
   }
 
   function writePrompt() {
@@ -182,21 +194,30 @@ export default function Terminal() {
       cursorBlink: true,
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
-      fontSize: 14,
+      fontSize: 13.5,
+      lineHeight: 1.35,
       theme: {
-        background: "#0b0f17",
-        foreground: "#e6edf3",
-        cursor: "#e6edf3",
-        selectionBackground: "#264f78",
-        black: "#0b0f17",
-        red: "#ff6b6b",
-        green: "#7ee787",
-        yellow: "#ffd866",
-        blue: "#6cb6ff",
-        magenta: "#d2a8ff",
-        cyan: "#56d4dd",
-        white: "#e6edf3",
-        brightBlack: "#8b949e",
+        background: "#09090b",
+        foreground: "#e4e4e7",
+        cursor: "#34d399",
+        cursorAccent: "#09090b",
+        selectionBackground: "rgba(52, 211, 153, 0.25)",
+        black: "#18181b",
+        red: "#f87171",
+        green: "#34d399",
+        yellow: "#fbbf24",
+        blue: "#60a5fa",
+        magenta: "#c084fc",
+        cyan: "#22d3ee",
+        white: "#e4e4e7",
+        brightBlack: "#71717a",
+        brightRed: "#fca5a5",
+        brightGreen: "#6ee7b7",
+        brightYellow: "#fcd34d",
+        brightBlue: "#93c5fd",
+        brightMagenta: "#d8b4fe",
+        brightCyan: "#67e8f9",
+        brightWhite: "#fafafa",
       },
     });
     const fit = new FitAddon();
@@ -209,14 +230,17 @@ export default function Terminal() {
 
     term.write(t("welcome"));
     term.write("\n\x1b[90m" + t("sandboxStarting") + "\x1b[0m");
+    onStatusRef.current?.("connecting");
 
     const ensureSession = async () => {
       try {
         const resp = await fetch("/api/session", { method: "POST" });
         if (!resp.ok) throw new Error();
         term.write("\n\x1b[32m" + t("sandboxReady") + "\x1b[0m");
+        onStatusRef.current?.("ready");
       } catch {
         term.write("\n\x1b[31m" + t("sandboxError") + "\x1b[0m");
+        onStatusRef.current?.("error");
       } finally {
         writePrompt();
       }
@@ -233,9 +257,13 @@ export default function Terminal() {
       }
     };
     window.addEventListener("resize", onResize);
+    // refit when the panel itself resizes (grid/viewport changes)
+    const ro = new ResizeObserver(onResize);
+    ro.observe(containerRef.current);
 
     return () => {
       window.removeEventListener("resize", onResize);
+      ro.disconnect();
       onData.dispose();
       term.dispose();
       termRef.current = null;

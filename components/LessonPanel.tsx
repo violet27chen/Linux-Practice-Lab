@@ -1,11 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  CaretLeft,
+  CaretDown,
+  CaretRight,
+  CheckCircle,
+  XCircle,
+  Lightbulb,
+  Code,
+  Play,
+  ArrowCounterClockwise,
+  CircleNotch,
+} from "@phosphor-icons/react";
 import { lessons, type Lesson } from "@/lib/lessons";
 import { useLang } from "@/components/LangProvider";
 
 type SetupState = "idle" | "doing" | "done" | "error";
 type VerifyResult = { passed: boolean; stdout?: string; stderr?: string };
+
+const DONE_KEY = "lp_done";
+
+function loadDone(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(DONE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function LessonPanel() {
   const { t, lang } = useLang();
@@ -16,6 +41,24 @@ export default function LessonPanel() {
   const [solutionOpen, setSolutionOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
+  const [done, setDone] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDone(loadDone());
+  }, []);
+
+  function markDone(id: string) {
+    setDone((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      try {
+        localStorage.setItem(DONE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore quota errors */
+      }
+      return next;
+    });
+  }
 
   const levels = Array.from(new Set(lessons.map((l) => l.level))).sort(
     (a, b) => a - b,
@@ -50,6 +93,7 @@ export default function LessonPanel() {
         body: JSON.stringify({ lessonId: selected.id }),
       });
       const data = await resp.json();
+      if (data.passed) markDone(selected.id);
       setResult({
         passed: data.passed,
         stdout: data.stdout,
@@ -66,52 +110,71 @@ export default function LessonPanel() {
     <div className="lesson-panel">
       {!selected ? (
         <div className="lesson-list">
+          <div className="lesson-progress" style={{ marginBottom: 12 }}>
+            <span className="done-count">{done.length}</span>
+            <span>/ {lessons.length}</span>
+            <span>{t("progressLabel")}</span>
+          </div>
           {levels.map((lv) => (
             <div key={lv} className="lesson-group">
               <div className="lesson-group-title">
-                {t("level")} {lv} · {L(lessons.find((l) => l.level === lv)!.levelName)}
+                <span className="lv">
+                  {t("level")} {lv}
+                </span>
+                {L(lessons.find((l) => l.level === lv)!.levelName)}
               </div>
               {lessons
                 .filter((l) => l.level === lv)
-                .map((l) => (
-                  <button
-                    key={l.id}
-                    className="lesson-item"
-                    onClick={() => startLesson(l)}
-                  >
-                    {L(l.title)}
-                  </button>
-                ))}
+                .map((l, i) => {
+                  const isDone = done.includes(l.id);
+                  return (
+                    <button
+                      key={l.id}
+                      className={`lesson-item${isDone ? " is-done" : ""}`}
+                      onClick={() => startLesson(l)}
+                    >
+                      <span className="lesson-idx">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span className="li-title">{L(l.title)}</span>
+                      {isDone && (
+                        <span className="li-done" aria-label={t("passedShort")}>
+                          <CheckCircle size={15} weight="fill" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
             </div>
           ))}
           <p className="lesson-empty">{t("noLessonSelected")}</p>
         </div>
       ) : (
         <div className="lesson-detail">
-          <div className="lesson-detail-head">
-            <span className="lesson-level">
-              {t("level")} {selected.level} · {L(selected.levelName)}
-            </span>
-            <button
-              className="link-btn"
-              onClick={() => {
-                setSelected(null);
-                setSetup("idle");
-                setResult(null);
-              }}
-            >
-              ← {t("lessons")}
-            </button>
-          </div>
+          <button
+            className="back-btn"
+            onClick={() => {
+              setSelected(null);
+              setSetup("idle");
+              setResult(null);
+            }}
+          >
+            <CaretLeft size={13} weight="bold" />
+            {t("lessons")}
+          </button>
+
+          <span className="lesson-level-tag">
+            {t("level")} {selected.level} · {L(selected.levelName)}
+          </span>
           <h2>{L(selected.title)}</h2>
 
-          <div className="block">
+          <div>
             <div className="block-label">{t("objective")}</div>
             <p className="goal">{L(selected.objective)}</p>
           </div>
-          <div className="block">
+          <div>
             <div className="block-label">{t("instructions")}</div>
-            <p>{L(selected.instructions)}</p>
+            <p className="instructions">{L(selected.instructions)}</p>
           </div>
 
           <div className="lesson-actions">
@@ -120,23 +183,48 @@ export default function LessonPanel() {
               onClick={() => startLesson(selected)}
               disabled={setup === "doing"}
             >
+              {setup === "doing" ? (
+                <CircleNotch size={14} weight="bold" className="spin" />
+              ) : setup === "done" ? (
+                <ArrowCounterClockwise size={14} weight="bold" />
+              ) : (
+                <Play size={14} weight="bold" />
+              )}
               {setup === "done" ? t("resetLesson") : t("startLesson")}
             </button>
-            <button
-              className="btn primary"
-              onClick={verify}
-              disabled={verifying}
-            >
+            <button className="btn primary" onClick={verify} disabled={verifying}>
+              {verifying ? (
+                <CircleNotch size={14} weight="bold" className="spin" />
+              ) : (
+                <CheckCircle size={14} weight="bold" />
+              )}
               {verifying ? t("verifying") : t("verify")}
             </button>
           </div>
 
-          {setup === "done" && <p className="ok-note">{t("lessonStarted")}</p>}
-          {setup === "error" && <p className="err-note">{t("sandboxError")}</p>}
+          {setup === "done" && !result && (
+            <p className="setup-note ok">
+              <CheckCircle size={14} weight="bold" />
+              {t("lessonStarted")}
+            </p>
+          )}
+          {setup === "error" && (
+            <p className="setup-note err">
+              <XCircle size={14} weight="bold" />
+              {t("sandboxError")}
+            </p>
+          )}
 
           {result && (
             <div className={result.passed ? "verify ok" : "verify fail"}>
-              <strong>{result.passed ? t("passed") : t("failed")}</strong>
+              <span className="verify-title">
+                {result.passed ? (
+                  <CheckCircle size={16} weight="fill" />
+                ) : (
+                  <XCircle size={16} weight="fill" />
+                )}
+                {result.passed ? t("passed") : t("failed")}
+              </span>
               {result.stdout ? (
                 <pre className="verify-out">{result.stdout}</pre>
               ) : null}
@@ -144,29 +232,33 @@ export default function LessonPanel() {
           )}
 
           <div className="hint-block">
-            <button
-              className="link-btn"
-              onClick={() => setHintsOpen((v) => !v)}
-            >
-              {hintsOpen ? "▾" : "▸"} {t("showHints")}
+            <button className="disclosure" onClick={() => setHintsOpen((v) => !v)}>
+              {hintsOpen ? (
+                <CaretDown size={12} weight="bold" />
+              ) : (
+                <CaretRight size={12} weight="bold" />
+              )}
+              <Lightbulb size={14} weight="bold" />
+              {t("showHints")}
             </button>
             {hintsOpen && (
               <ul className="hints">
                 {selected.hints.map((h, i) => (
-                  <li key={i}>
-                    <span className="hint-tag">
-                      {t("hint")} {i + 1}
-                    </span>{" "}
-                    {L(h)}
-                  </li>
+                  <li key={i}>{L(h)}</li>
                 ))}
               </ul>
             )}
             <button
-              className="link-btn"
+              className="disclosure"
               onClick={() => setSolutionOpen((v) => !v)}
             >
-              {solutionOpen ? "▾" : "▸"} {t("showSolution")}
+              {solutionOpen ? (
+                <CaretDown size={12} weight="bold" />
+              ) : (
+                <CaretRight size={12} weight="bold" />
+              )}
+              <Code size={14} weight="bold" />
+              {t("showSolution")}
             </button>
             {solutionOpen && <pre className="solution">{L(selected.solution)}</pre>}
           </div>

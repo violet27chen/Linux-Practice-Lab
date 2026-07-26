@@ -44,7 +44,12 @@ export type UIKey =
   | "objective"
   | "instructions"
   | "runHint"
-  | "loading";
+  | "loading"
+  | "statusConnecting"
+  | "statusReady"
+  | "statusError"
+  | "progressLabel"
+  | "passedShort";
 
 export const ui: Record<UIKey, { en: string; zh: string }> = {
   appTitle: {
@@ -52,7 +57,7 @@ export const ui: Record<UIKey, { en: string; zh: string }> = {
     zh: "Linux 练习实验室",
   },
   appSubtitle: {
-    en: "Learn Linux by doing — a real shell in your browser",
+    en: "Learn Linux by doing, in a real shell in your browser",
     zh: "在浏览器里用真终端学 Linux",
   },
   tagline: {
@@ -68,10 +73,10 @@ export const ui: Record<UIKey, { en: string; zh: string }> = {
   verify: { en: "Verify", zh: "校验" },
   resetLesson: { en: "Reset lesson", zh: "重置关卡" },
   verifyResult: { en: "Result", zh: "结果" },
-  passed: { en: "✅ Solved! Well done.", zh: "✅ 通过了！做得好。" },
+  passed: { en: "Solved! Well done.", zh: "通过了！做得好。" },
   failed: {
-    en: "❌ Not there yet — check the task and try again.",
-    zh: "❌ 还没完成 —— 再看看任务要求，重试一次。",
+    en: "Not there yet. Check the task and try again.",
+    zh: "还没完成，再看看任务要求重试一次。",
   },
   hint: { en: "Hint", zh: "提示" },
   showHints: { en: "Show hints", zh: "显示提示" },
@@ -107,10 +112,15 @@ export const ui: Record<UIKey, { en: string; zh: string }> = {
   newSession: { en: "New sandbox", zh: "新建沙盒" },
   sessionRestarted: { en: "A fresh sandbox has been started.", zh: "已启动一个全新的沙盒。" },
   footer: {
-    en: "Open-source under the MIT License · Built with Next.js & Vercel Sandbox",
-    zh: "基于 MIT 协议开源 · 使用 Next.js 与 Vercel Sandbox 构建",
+    en: "MIT License · Next.js + Vercel Sandbox",
+    zh: "MIT 开源 · Next.js + Vercel Sandbox",
   },
   repoLink: { en: "View source on GitHub", zh: "在 GitHub 查看源码" },
+  statusConnecting: { en: "connecting", zh: "连接中" },
+  statusReady: { en: "ready", zh: "就绪" },
+  statusError: { en: "error", zh: "错误" },
+  progressLabel: { en: "completed", zh: "已完成" },
+  passedShort: { en: "Passed", zh: "已通过" },
   level: { en: "Level", zh: "关卡" },
   objective: { en: "Goal", zh: "目标" },
   instructions: { en: "Instructions", zh: "任务说明" },

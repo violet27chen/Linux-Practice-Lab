@@ -1,23 +1,25 @@
 "use client";
 
+import { TerminalWindow, GithubLogo } from "@phosphor-icons/react";
 import { useLang } from "@/components/LangProvider";
+
+const REPO_URL =
+  process.env.NEXT_PUBLIC_REPO_URL ||
+  "https://github.com/violet27chen/Linux-Practice-Lab";
 
 export default function Header() {
   const { t, lang, setLang } = useLang();
   return (
     <header className="header">
       <div className="brand">
-        <span className="logo" aria-hidden>
-          🐧
+        <span className="brand-mark" aria-hidden>
+          <TerminalWindow size={16} weight="bold" />
         </span>
-        <div className="brand-text">
-          <h1>{t("appTitle")}</h1>
-          <p>{t("appSubtitle")}</p>
-        </div>
+        <span className="brand-name">{t("appTitle")}</span>
+        <span className="brand-sub">{t("appSubtitle")}</span>
       </div>
-      <div className="lang">
-        <span className="lang-label">{t("language")}</span>
-        <div className="lang-switch">
+      <div className="header-right">
+        <div className="lang-switch" role="group" aria-label={t("language")}>
           <button
             className={lang === "en" ? "active" : ""}
             onClick={() => setLang("en")}
@@ -33,6 +35,15 @@ export default function Header() {
             中文
           </button>
         </div>
+        <a
+          className="icon-link"
+          href={REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t("repoLink")}
+        >
+          <GithubLogo size={18} weight="bold" />
+        </a>
       </div>
     </header>
   );

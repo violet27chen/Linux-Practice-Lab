@@ -32,3 +32,6 @@ npm-debug.log*
 
 # workspace memory (project notes, not source)
 .workbuddy/
+
+.vercel
+.env*
